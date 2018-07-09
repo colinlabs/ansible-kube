@@ -1,0 +1,21 @@
+---
+- name: restart kubelet
+  command: /bin/true
+  notify:
+    - Kubelet | reload systemd
+    - Kubelet | reload kubelet
+
+- name: Kubelet | reload systemd
+  command: systemctl daemon-reload
+
+- name: Kubelet | reload kubelet
+  service:
+    name: kubelet
+    state: restarted
+
+- name: node | remove hosts map
+  shell: sed -i "/{{ hostvars[groups["kube-master"][0]]['ansible_host'] }}  localhost/d" /etc/hosts
+  args:
+    warn: false
+
+- include: roles/kubernetes/master/handlers/main.yml

@@ -1,0 +1,5 @@
+# Set to true to allow pre-checks to fail and continue deployment
+ignore_assert_errors: false
+
+# All inventory hostnames will be written into each /etc/hosts file.
+populate_inventory_to_hosts_file: true

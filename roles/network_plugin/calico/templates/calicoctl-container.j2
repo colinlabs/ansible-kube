@@ -1,0 +1,13 @@
+#!/bin/bash
+{{ docker_bin_dir }}/docker run -i --privileged --rm \
+--net=host --pid=host \
+-v {{ docker_bin_dir }}/docker:{{ docker_bin_dir }}/docker \
+-v /var/run/docker.sock:/var/run/docker.sock \
+-v /var/run/calico:/var/run/calico \
+{% if calico_datastore_type == "kubernetes" %}
+-e DATASTORE_TYPE=kubernetes \
+-e KUBECONFIG=/calico-kubeconfig \
+-v /etc/cni/net.d/calico-kubeconfig:/calico-kubeconfig \
+{% endif %}
+{{ calicoctl_image_repo }}:{{ calicoctl_image_tag}} \
+"$@"

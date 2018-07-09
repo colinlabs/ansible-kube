@@ -1,0 +1,9 @@
+---
+- name: "Download items"
+  include_tasks: "download_container.yml"
+  vars:
+    download: "{{ download_defaults | combine(item.value) }}"
+  with_dict: "{{ downloads }}"
+  when:
+    - not skip_downloads|default(false)
+    - item.value.enabled

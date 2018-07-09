@@ -1,0 +1,9 @@
+---
+# We recommend using Typha if you have more than 50 nodes.  Above 100 nodes it is essential
+# (when using the Kubernetes datastore).  Use one replica for every 100-200 nodes.  In
+# production, we recommend running at least 3 replicas to reduce the impact of rolling upgrade.
+calico_typha_enabled: false
+calico_typha_replicas: 2
+
+# Now only support kubernetes datastore
+calico_datastore_type: kubernetes

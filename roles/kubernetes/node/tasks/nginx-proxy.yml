@@ -1,0 +1,26 @@
+---
+- name: nginx-proxy | Write static pod
+  template:
+    src: manifests/nginx-proxy.manifest.j2
+    dest: "{{kube_manifest_dir}}/nginx-proxy.yml"
+
+- name: nginx-proxy | Make nginx directory
+  file:
+    path: /etc/nginx
+    state: directory
+    mode: 0700
+    owner: root
+
+- name: nginx-proxy | Write nginx-proxy configuration
+  template:
+    src: nginx.conf.j2
+    dest: "/etc/nginx/nginx.conf"
+    owner: root
+    mode: 0755
+    backup: yes
+
+- name: nginx-proxy | Map DNS localhost to first master
+  shell: sed -i '1i\{{ hostvars[groups["kube-master"][0]]['ansible_host'] }}  localhost' /etc/hosts
+  when: is_kube_master == false and loadbalancer_apiserver_localhost
+  args:
+    warn: false

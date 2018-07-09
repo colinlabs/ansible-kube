@@ -1,0 +1,49 @@
+- hosts: k8s-cluster:etcd
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  vars:
+    ansible_ssh_pipelining: true
+  gather_facts: true
+  pre_tasks:
+    - name: gather facts from all instances
+      setup:
+      delegate_to: "{{item}}"
+      delegate_facts: True
+      with_items: "{{ groups['k8s-cluster'] + groups['etcd']|default([]) }}"
+
+- hosts: k8s-cluster:etcd
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  gather_facts: false
+  roles:
+    - { role: kube-defaults }
+    - { role: bootstrap-os, tags: bootstrap-os}
+    - { role: kubernetes/preinstall, tags: preinstall }
+    - { role: docker, tags: docker }
+    - { role: download, tags: download, skip_downloads: false }
+
+- hosts: etcd
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  roles:
+    - { role: kube-defaults}
+    - { role: etcd, tags: etcd, etcd_cluster_setup: true }
+
+- hosts: kube-master
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  roles:
+    - { role: kube-defaults}
+    - { role: etcd, tags: etcd, etcd_cluster_setup: false }
+
+- hosts: k8s-cluster
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  roles:
+    - { role: kube-defaults}
+    - { role: kubernetes/node, tags: node}
+
+- hosts: kube-master
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  roles:
+    - { role: kube-defaults}
+    - { role: kubernetes/master, tags: master }
+    - { role: kubernetes/client, tags: client }
+    - { role: kubernetes-apps/cluster_roles, tags: cluster-roles }
+    - { role: kubernetes/bootstrap-node, tags: bootstrap-node }
+    - { role: network_plugin, tags: network }

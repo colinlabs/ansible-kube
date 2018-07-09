@@ -1,0 +1,97 @@
+---
+- name: gather os specific variables
+  include_vars: "{{ item }}"
+  with_first_found:
+    - files:
+        - "{{ ansible_distribution|lower }}-{{ ansible_distribution_version|lower|replace('/', '_') }}.yml"
+        - "{{ ansible_distribution|lower }}-{{ ansible_distribution_release }}.yml"
+        - "{{ ansible_distribution|lower }}-{{ ansible_distribution_major_version|lower|replace('/', '_') }}.yml"
+        - "{{ ansible_distribution|lower }}.yml"
+        - "{{ ansible_os_family|lower }}.yml"
+        - defaults.yml
+      paths:
+        - ../vars
+      skip: true
+  tags:
+    - facts
+
+- name: check for minimum kernel version
+  fail:
+    msg: >
+          docker requires a minimum kernel version of
+          {{ docker_kernel_min_version }} on
+          {{ ansible_distribution }}-{{ ansible_distribution_version }}
+  when: ansible_kernel|version_compare(docker_kernel_min_version, "<")
+  tags:
+    - facts
+
+- include_tasks: set_facts_dns.yml
+  when: dns_mode != 'none' and resolvconf_mode == 'docker_dns'
+  tags:
+    - facts
+
+- import_tasks: pre-upgrade.yml
+
+- name: ensure docker-ce repository is enabled
+  action: "{{ docker_repo_info.pkg_repo }}"
+  args:
+    repo: "{{item}}"
+    state: present
+    filename: docker-ce
+  with_items: "{{ docker_repo_info.repos }}"
+  when: ansible_os_family != "RedHat"
+
+# TODO: RedHat/CentOS
+
+# - name: Configure docker repository on RedHat/CentOS
+#   template:
+#     src: "rh_docker.repo.j2"
+#     dest: "/etc/yum.repos.d/docker.repo"
+#   when: ansible_distribution in ["CentOS","RedHat"] and not is_atomic
+
+# - name: Copy yum.conf for editing
+#   copy:
+#     src: "{{ yum_conf }}"
+#     dest: "{{ docker_yum_conf }}"
+#     remote_src: yes
+#   when: ansible_distribution in ["CentOS","RedHat"] and not is_atomic
+
+# - name: Edit copy of yum.conf to set obsoletes=0
+#   lineinfile:
+#     path: "{{ docker_yum_conf }}"
+#     state: present
+#     regexp: '^obsoletes='
+#     line: 'obsoletes=0'
+#   when: ansible_distribution in ["CentOS","RedHat"] and not is_atomic
+
+- name: ensure docker packages are installed
+  action: "{{ docker_package_info.pkg_mgr }}"
+  args:
+    pkg: "{{item.name}}"
+    force: "{{item.force|default(omit)}}"
+    conf_file: "{{item.yum_conf|default(omit)}}"
+    state: present
+  register: docker_task_result
+  until: docker_task_result|succeeded
+  retries: 4
+  delay: "{{ retry_stagger | random + 3 }}"
+  with_items: "{{ docker_package_info.pkgs }}"
+  notify: restart docker
+  when: ansible_os_family in ["Debian", "RedHat"]
+
+- name: set fact for docker_version
+  command: "docker version -f '{{ '{{' }}.Client.Version{{ '}}' }}'"
+  register: installed_docker_version
+  changed_when: false
+
+- name: Set docker systemd config
+  import_tasks: systemd.yml
+
+- name: ensure docker service is started and enabled
+  no_log: true
+  service:
+    name: "{{ item }}"
+    enabled: yes
+    state: started
+  with_items:
+    - docker

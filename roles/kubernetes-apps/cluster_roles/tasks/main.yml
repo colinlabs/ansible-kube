@@ -1,0 +1,52 @@
+---
+- name: Kubernetes Apps | Wait for kube-apiserver
+  uri:
+    url: "{{ kube_apiserver_endpoint }}/healthz"
+    validate_certs: no
+    client_cert: "{{ kube_apiserver_client_cert }}"
+    client_key: "{{ kube_apiserver_client_key }}"
+  register: result
+  until: result.status == 200
+  retries: 10
+  delay: 6
+  when: inventory_hostname == groups['kube-master'][0]
+
+- name: Kubernetes Apps | Add ClusterRoleBinding kubelet-bootstrap
+  template:
+    src: "node-bootstrap-crb.yml.j2"
+    dest: "{{ kube_config_dir }}/node-bootstrap-crb.yml"
+  register: node_crb_manifest
+  when:
+    - rbac_enabled
+    - inventory_hostname == groups['kube-master'][0]
+
+- name: Kubernetes Apps | Apply ClusterRoleBinding kubelet-bootstrap
+  kube:
+    name: "kubelet-bootstrap"
+    kubectl: "{{bin_dir}}/kubectl"
+    resource: "clusterrolebinding"
+    filename: "{{ kube_config_dir }}/node-bootstrap-crb.yml"
+    state: latest
+  when:
+    - rbac_enabled
+    - inventory_hostname == groups['kube-master'][0]
+  
+- name: Kubernetes Apps | Add ClusterRole system:certificates.k8s.io:certificatesigningrequests:selfnodeserver
+  template:
+    src: "selfnodeserver-cr.yml.j2"
+    dest: "{{ kube_config_dir }}/selfnodeserver-cr.yml"
+  register: selfnodeserver_cr_manifest
+  when:
+    - rbac_enabled
+    - inventory_hostname == groups['kube-master'][0]
+
+- name: Kubernetes app | Create TLS bootstrapping clusterrolebinding
+  shell: |
+    kubectl create clusterrolebinding node-client-auto-approve-csr --clusterrole=system:certificates.k8s.io:certificatesigningrequests:nodeclient --group=system:kubelet-bootstrap
+    kubectl create clusterrolebinding node-client-auto-renew-crt --clusterrole=system:certificates.k8s.io:certificatesigningrequests:selfnodeclient --group=system:nodes
+    kubectl create clusterrolebinding node-server-auto-renew-crt --clusterrole=system:certificates.k8s.io:certificatesigningrequests:selfnodeserver --group=system:nodes
+  when: 
+    - kube_autoapprove_enabled
+    - selfnodeserver_cr_manifest.changed
+    - inventory_hostname == groups['kube-master'][0]
+  ignore_errors: true

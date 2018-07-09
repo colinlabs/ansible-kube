@@ -1,0 +1,21 @@
+---
+- name: Flannel | Create Flannel manifests
+  template:
+    src: "cni-flannel.yml.j2"
+    dest: "{{kube_config_dir}}/cni-flannel.yml"
+  register: flannel_node_manifests
+  when:
+    - inventory_hostname in groups['kube-master']
+
+- name: Flannel | Start Resources
+  kube:
+    kubectl: "{{bin_dir}}/kubectl"
+    filename: "{{kube_config_dir}}/cni-flannel.yml"
+    state: "latest"
+  when: inventory_hostname == groups['kube-master'][0]
+
+- name: Flannel | Wait for flannel subnet.env file presence
+  wait_for:
+    path: /run/flannel/subnet.env
+    delay: 5
+    timeout: 600

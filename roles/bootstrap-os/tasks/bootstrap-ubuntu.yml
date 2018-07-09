@@ -1,0 +1,11 @@
+---
+- name: Bootstrap | Set Ubuntu mirror
+  template: src=mirror-ubuntu.j2 dest=/etc/apt/sources.list
+  when: alicloud_system_mirror
+
+- name: Bootstrap | Install Packages
+  package:
+    name: '{{ item }}'
+    state: latest
+  with_items: "{{ required_pkgs | default([]) }}"
+

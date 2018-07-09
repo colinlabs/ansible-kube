@@ -1,0 +1,39 @@
+---
+- name: "Check_certs | check if all certs have already been generated on first master"
+  find:
+    paths: "{{ etcd_cert_dir }}"
+    patterns: "ca.pem,etcd.pem,etcd-key.pem"
+    get_checksum: true
+  delegate_to: "{{groups['etcd'][0]}}"
+  register: etcdcert_master
+  run_once: true
+
+- name: "Check certs | check if a cert already exists on node"
+  stat:
+    path: "{{ etcd_cert_dir }}/{{ item }}"
+  register: etcdcert_node
+  with_items:
+    - ca.pem
+    - etcd.pem
+    - etcd-key.pem
+
+- name: Check certs | write openssl config
+  template:
+    src: "openssl.conf.j2"
+    dest: "{{ etcd_cert_dir }}/openssl-etcd.conf"
+  register: openssl_etcd
+  run_once: yes
+  delegate_to: "{{groups['etcd'][0]}}"
+
+- name: "Check_certs | Set 'gen_certs' to true"
+  set_fact:
+    gen_certs: true
+  when: etcdcert_master.matched != 3 or openssl_etcd.changed
+  run_once: true
+  
+- name: "Check_certs | Set 'sync_certs' to true"
+  set_fact:
+    sync_certs: true
+  when: openssl_etcd.changed or
+        not etcdcert_node.results[1].stat.exists|default(False) or 
+        etcdcert_node.results[1].stat.checksum|default('') != etcdcert_master.files|selectattr("path", "equalto", etcdcert_node.results[1].stat.path)|map(attribute="checksum")|first|default('')

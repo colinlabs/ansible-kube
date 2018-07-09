@@ -1,0 +1,17 @@
+---
+- import_tasks: bootstrap-ubuntu.yml
+  when:  ansible_distribution|lower == "ubuntu"
+
+- import_tasks: bootstrap-centos.yml
+  when: ansible_distribution|lower == "centos"
+
+- name: Gather nodes hostnames
+  setup:
+    gather_subset: '!all'
+    filter: ansible_*
+
+- name: Assign inventory name to unconfigured hostnames
+  hostname:
+    name: "{{inventory_hostname}}"
+  when:
+    - override_system_hostname

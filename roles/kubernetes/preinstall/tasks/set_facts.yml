@@ -1,0 +1,6 @@
+---
+- import_tasks: set_resolv_facts.yml
+  tags:
+    - bootstrap-os
+    - resolvconf
+    - facts

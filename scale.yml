@@ -1,0 +1,29 @@
+---
+
+## We still have to gather facts about our masters and etcd nodes
+- hosts: k8s-cluster:etcd
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  vars:
+    ansible_ssh_pipelining: true
+  gather_facts: true
+
+## Bootstrap any new workers
+- hosts: kube-node
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  gather_facts: false
+  vars:
+    ansible_ssh_pipelining: false
+  roles:
+    - { role: kube-defaults}
+    - { role: bootstrap-os, tags: bootstrap-os}
+
+## Target only workers to get kubelet installed and checking in on any new nodes
+- hosts: kube-node
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  roles:
+    - { role: kube-defaults}
+    - { role: kubernetes/preinstall, tags: preinstall }
+    - { role: docker, tags: docker }
+    - { role: download, tags: download, skip_downloads: false }
+    - { role: kubernetes/node, tags: node }
+    - { role: network_plugin, tags: network }

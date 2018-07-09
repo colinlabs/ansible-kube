@@ -1,0 +1,31 @@
+---
+- name: Hosts | populate inventory into hosts file
+  blockinfile:
+    dest: /etc/hosts
+    block: |-
+      {% for item in (groups['k8s-cluster'] + groups['etcd']|default([]))|unique -%}{{ hostvars[item]['access_ip'] | default(hostvars[item]['ip'] | default(hostvars[item]['ansible_default_ipv4']['address'])) }} {{ hostvars[item]['ansible_hostname'] }}
+      {% endfor %}
+    state: present
+    create: yes
+    backup: no
+    marker: "# Ansible inventory hosts {mark}"
+  when: populate_inventory_to_hosts_file
+
+- name: Hosts | populate kubernetes loadbalancer address into hosts file
+  lineinfile:
+    dest: /etc/hosts
+    regexp: ".*{{ apiserver_loadbalancer_domain_name }}$"
+    line: "{{ loadbalancer_apiserver.address }} {{ apiserver_loadbalancer_domain_name }}"
+    state: present
+    backup: no
+  when:
+    - loadbalancer_apiserver is defined
+    - loadbalancer_apiserver.address is defined
+
+- name: Hosts | localhost ipv4 in hosts file
+  lineinfile:
+    dest: /etc/hosts
+    line: "127.0.0.1 localhost localhost.localdomain"
+    regexp: '^127.0.0.1.*$'
+    state: present
+    backup: no

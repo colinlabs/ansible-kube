@@ -1,0 +1,27 @@
+- name: Approve certificatesigningrequests
+  shell: kubectl get csr | awk '/Pending/ {print $1}' | xargs kubectl certificate approve
+  register: approve_csr_result
+  ignore_errors: true
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ groups['kube-master'][0] }}"
+  when: kube_autoapprove_enabled
+
+- name: Kubernetes Apps | Wait for kube-kubelet
+  uri:
+    url: "https://{{ ansible_host }}:10250/healthz"
+    validate_certs: no
+    client_cert: "/var/lib/kubelet/pki/kubelet-client.crt"
+    client_key: "/var/lib/kubelet/pki/kubelet-client.key"
+  register: result
+  until: result.status == 200
+  retries: 6
+  delay: 5
+  when: not inventory_hostname in groups['kube-master']
+
+- name: Remove extra host from /etc/hosts 
+  shell: sed -i '/{{ hostvars[groups["kube-master"][0]]['ansible_host'] }}  localhost/d' /etc/hosts
+  changed_when: false
+  args:
+    warn: false
+  when: not inventory_hostname in groups['kube-master'] and loadbalancer_apiserver_localhost and result.status == 200

@@ -1,0 +1,122 @@
+---
+- import_tasks: verify-settings.yml
+  tags:
+    - asserts
+
+# # This is run before bin_dir is pinned because these tasks are run on localhost
+# - import_tasks: pre_upgrade.yml
+#   tags:
+#     - upgrade
+
+- name: check bin dir exists
+  file:
+    path: "{{bin_dir}}"
+    state: directory
+    owner: root
+  become: true
+  tags:
+    - bootstrap-os
+
+# - import_tasks: set_facts.yml
+#   tags:
+#     - facts
+
+- name: gather os specific variables
+  include_vars: "{{ item }}"
+  with_first_found:
+    - files:
+        - "{{ ansible_distribution|lower }}-{{ ansible_distribution_version|lower|replace('/', '_') }}.yml"
+        - "{{ ansible_distribution|lower }}-{{ ansible_distribution_release }}.yml"
+        - "{{ ansible_distribution|lower }}-{{ ansible_distribution_major_version|lower|replace('/', '_') }}.yml"
+        - "{{ ansible_distribution|lower }}.yml"
+        - "{{ ansible_os_family|lower }}.yml"
+        - defaults.yml
+      paths:
+        - ../vars
+      skip: true
+  tags:
+    - facts
+- name: Create kubernetes directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+  when: inventory_hostname in groups['k8s-cluster']
+  tags:
+    - kubelet
+    - k8s-secrets
+    - kube-controller-manager
+    - kube-apiserver
+    - bootstrap-os
+    - apps
+    - network
+    - master
+    - node
+  with_items:
+    - "{{ kube_config_dir }}"
+    - "{{ kube_config_dir }}/ssl"
+    - "{{ kube_manifest_dir }}"
+    - "{{ kube_script_dir }}"
+
+- name: check cloud_provider value
+  fail:
+    msg: "If set the 'cloud_provider' var must be set either to 'generic', 'gce', 'aws', 'azure', 'openstack', 'vsphere', or external"
+  when:
+    - cloud_provider is defined
+    - cloud_provider not in ['generic', 'gce', 'aws', 'azure', 'openstack', 'vsphere', 'external']
+  tags:
+    - cloud-provider
+    - facts
+
+- name: Create cni directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+  with_items:
+    - "/etc/cni/net.d"
+    - "/opt/cni/bin"
+  when:
+    - kube_network_plugin in ["calico", "weave", "canal", "flannel", "contiv", "cilium"]
+    - inventory_hostname in groups['k8s-cluster']
+  tags:
+    - network
+    - bootstrap-os
+
+- name: set default sysctl file path
+  set_fact:
+    sysctl_file_path: "/etc/sysctl.d/99-sysctl.conf"
+  tags:
+    - bootstrap-os
+
+- name: Stat sysctl file configuration
+  stat:
+    path: "{{sysctl_file_path}}"
+  register: sysctl_file_stat
+  tags:
+    - bootstrap-os
+
+- name: Change sysctl file path to link source if linked
+  set_fact:
+    sysctl_file_path: "{{sysctl_file_stat.stat.lnk_source}}"
+  when:
+    - sysctl_file_stat.stat.islnk is defined
+    - sysctl_file_stat.stat.islnk
+  tags:
+    - bootstrap-os
+
+- name: Enable ip forwarding
+  sysctl:
+    sysctl_file: "{{sysctl_file_path}}"
+    name: net.ipv4.ip_forward
+    value: 1
+    state: present
+    reload: yes
+  tags:
+    - bootstrap-os
+
+- import_tasks: etchosts.yml
+  tags:
+    - bootstrap-os
+    - etchosts
+

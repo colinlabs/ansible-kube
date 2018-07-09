@@ -1,0 +1,110 @@
+---
+local_release_dir: /tmp/releases
+
+# Used to only evaluate vars from download role
+skip_downloads: false
+
+# if this is set to true will only download files once. Doesn't work
+# on Container Linux by CoreOS unless the download_localhost is true and localhost
+# is running another OS type. Default compress level is 1 (fastest).
+download_run_once: False
+download_compress: 1
+
+# if this is set to true, uses the localhost for download_run_once mode
+# (requires docker and sudo to access docker). You may want this option for
+# local caching of docker images or for Container Linux by CoreOS cluster nodes.
+# Otherwise, uses the first node in the kube-master group to store images
+# in the download_run_once mode.
+download_localhost: False
+
+# Always pull images if set to True. Otherwise check by the repo's tag/digest.
+download_always_pull: False
+
+# Use the first kube-master if download_localhost is not set
+download_delegate: "{% if download_localhost %}localhost{% else %}{{groups['kube-master'][0]}}{% endif %}"
+
+
+downloads:
+  etcd:
+    enabled: true
+    container: true
+    repo: "{{ etcd_image_repo }}"
+    tag: "{{ etcd_image_tag }}"
+    groups:
+      - etcd
+  hyperkube:
+    enabled: true
+    container: true
+    repo: "{{ hyperkube_image_repo }}"
+    tag: "{{ hyperkube_image_tag }}"
+    groups:
+      - k8s-cluster
+  flannel:
+    enabled: "{{ kube_network_plugin == 'flannel' or kube_network_plugin == 'canal' }}"
+    container: true
+    repo: "{{ flannel_image_repo }}"
+    tag: "{{ flannel_image_tag }}"
+    groups:
+      - k8s-cluster
+  flannel_cni:
+    enabled: "{{ kube_network_plugin == 'flannel' }}"
+    container: true
+    repo: "{{ flannel_cni_image_repo }}"
+    tag: "{{ flannel_cni_image_tag }}"
+    groups:
+      - k8s-cluster
+  calicoctl:
+    enabled: "{{ kube_network_plugin == 'calico' or kube_network_plugin == 'canal' }}"
+    container: true
+    repo: "{{ calicoctl_image_repo }}"
+    tag: "{{ calicoctl_image_tag }}"
+    groups:
+      - k8s-cluster
+  calico_node:
+    enabled: "{{ kube_network_plugin == 'calico' or kube_network_plugin == 'canal' }}"
+    container: true
+    repo: "{{ calico_node_image_repo }}"
+    tag: "{{ calico_node_image_tag }}"
+    groups:
+      - k8s-cluster
+  calico_cni:
+    enabled: "{{ kube_network_plugin == 'calico' or kube_network_plugin == 'canal' }}"
+    container: true
+    repo: "{{ calico_cni_image_repo }}"
+    tag: "{{ calico_cni_image_tag }}"
+    groups:
+      - k8s-cluster
+  calico_typha:
+    enabled: "{{ enable_network_policy or kube_network_plugin == 'canal' }}"
+    container: true
+    repo: "{{ calico_typha_image_repo }}"
+    tag: "{{ calico_typha_image_tag }}"
+    groups:
+      - k8s-cluster
+  pod_infra:
+    enabled: true
+    container: true
+    repo: "{{ pod_infra_image_repo }}"
+    tag: "{{ pod_infra_image_tag }}"
+    groups:
+      - k8s-cluster
+  nginx:
+    enabled: "{{ loadbalancer_apiserver_localhost }}"
+    container: true
+    repo: "{{ nginx_image_repo }}"
+    tag: "{{ nginx_image_tag }}"
+    groups:
+      - kube-node
+
+download_defaults:
+  container: false
+  file: false
+  repo: None
+  tag: None
+  enabled: false
+  dest: None
+  version: None
+  url: None
+  unarchive: false
+  owner: kube
+  mode: None

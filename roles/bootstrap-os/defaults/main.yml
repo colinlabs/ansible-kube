@@ -1,0 +1,7 @@
+---
+override_system_hostname: true
+ubuntu_mirror_url: http://mirrors.aliyun.com/ubuntu/
+alicloud_system_mirror: true
+required_pkgs:
+  - socat
+  - nfs-common

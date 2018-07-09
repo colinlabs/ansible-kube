@@ -1,0 +1,45 @@
+---
+- name: install | Set SSL CA directories
+  set_fact:
+    ssl_ca_dirs: "[
+      {% if ansible_os_family in ['CoreOS', 'Container Linux by CoreOS'] -%}
+      '/usr/share/ca-certificates',
+      {% elif ansible_os_family == 'RedHat' -%}
+      '/etc/pki/tls',
+      '/etc/pki/ca-trust',
+      {% elif ansible_os_family == 'Debian' -%}
+      '/usr/share/ca-certificates',
+      {% endif -%}
+    ]"
+  tags:
+    - facts
+- name: install | Compare host kubelet with hyperkube container
+  command: "{{ docker_bin_dir }}/docker run --rm -v {{ bin_dir }}:/systembindir {{ hyperkube_image_repo }}:{{ hyperkube_image_tag }} /usr/bin/cmp /hyperkube /systembindir/kubelet"
+  register: kubelet_task_compare_result
+  until: kubelet_task_compare_result.rc in [0,1,2]
+  retries: 4
+  delay: "{{ retry_stagger | random + 3 }}"
+  changed_when: false
+  failed_when: "kubelet_task_compare_result.rc not in [0,1,2]"
+  tags:
+    - hyperkube
+    - upgrade
+
+- name: install | Copy kubelet from hyperkube container
+  command: "{{ docker_bin_dir }}/docker run --rm -v {{ bin_dir }}:/systembindir {{ hyperkube_image_repo }}:{{ hyperkube_image_tag }} /bin/cp -f /hyperkube /systembindir/kubelet"
+  when: kubelet_task_compare_result.rc != 0
+  register: kubelet_task_result
+  until: kubelet_task_result.rc == 0
+  retries: 4
+  delay: "{{ retry_stagger | random + 3 }}"
+  tags:
+    - hyperkube
+    - upgrade
+  notify: restart kubelet
+
+- name: install | Write kubelet systemd init file
+  template:
+    src: "kubelet.{{ kubelet_deployment_type }}.service.j2"
+    dest: "/etc/systemd/system/kubelet.service"
+    backup: "yes"
+  notify: restart kubelet
